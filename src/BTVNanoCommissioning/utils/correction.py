@@ -17,10 +17,7 @@ from BTVNanoCommissioning.helpers.cTagSFReader import getSF
 from BTVNanoCommissioning.utils.AK4_parameters import correction_config as config
 
 
-
-
 def load_SF(campaign, syst=False):
-#def load_SF(campaign, config, syst=False):
     correction_map = {}
     for SF in config.keys():
         if SF == "lumiMask":
@@ -228,13 +225,6 @@ def load_SF(campaign, syst=False):
                 )
 
     return correction_map
-
-
-#def load_lumi(path):
-#    _lumi_path = "BTVNanoCommissioning.data.lumiMasks"
-#    with importlib.resources.path(_lumi_path) as filename:
-#    #with importlib.resources.path(_lumi_path, path) as filename:
-#        return LumiMask(filename)
 
 def load_lumi(campaign):
     _lumi_path = "BTVNanoCommissioning.data.lumiMasks"
