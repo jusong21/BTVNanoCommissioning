@@ -4,10 +4,8 @@ import pickle
 import contextlib
 import cloudpickle
 import os
-import re
 import numpy as np
 import awkward as ak
-import uproot
 from coffea.lookup_tools import extractor, txt_converters, rochester_lookup
 
 from coffea.lumi_tools import LumiMask
@@ -15,12 +13,16 @@ from coffea.btag_tools import BTagScaleFactor
 import correctionlib
 
 from BTVNanoCommissioning.helpers.cTagSFReader import getSF
+
 from BTVNanoCommissioning.utils.AK4_parameters import correction_config as config
 
 
+
+
 def load_SF(campaign, syst=False):
-    correction_map = {"campaign": campaign}
-    for SF in config[campaign].keys():
+#def load_SF(campaign, config, syst=False):
+    correction_map = {}
+    for SF in config.keys():
         if SF == "lumiMask":
             continue
         ## pileup weight
@@ -35,44 +37,27 @@ def load_SF(campaign, syst=False):
             ## Otherwise custom files
             else:
                 _pu_path = f"BTVNanoCommissioning.data.PU.{campaign}"
-                with importlib.resources.path(
-                    _pu_path, config[campaign]["PU"]
-                ) as filename:
+                with importlib.resources.path(_pu_path, config["PU"]) as filename:
                     if str(filename).endswith(".pkl.gz"):
                         with gzip.open(filename) as fin:
                             correction_map["PU"] = cloudpickle.load(fin)[
                                 "2017_pileupweight"
                             ]
-                    elif str(filename).endswith(".json.gz"):
-                        correction_map["PU"] = correctionlib.CorrectionSet.from_file(
-                            importlib.resources.path(
-                                f"BTVNanoCommissioning.data.PU.{campaign}", filename
-                            )
-                        )
                     elif str(filename).endswith(".histo.root"):
                         ext = extractor()
                         ext.add_weight_sets([f"* * {filename}"])
                         ext.finalize()
                         correction_map["PU"] = ext.make_evaluator()["PU"]
-
+        elif SF == "HLT":
+            ext = extractor()
+            
+            # with importlib.resources.path(_pu_path, config["HLT"]) as filename:
+            for filename in config["HLT"]:
+                ext.add_weight_sets([f"* * src/BTVNanoCommissioning/data/LSF/{campaign}/{filename}"])
+            ext.finalize()
+            correction_map["HLT"] = ext.make_evaluator()
         ## btag weight
         elif SF == "BTV":
-            if "btag" in config[campaign]["BTV"].keys() and config[campaign]["BTV"][
-                "btag"
-            ].endswith(".json.gz"):
-                correction_map["btag"] = correctionlib.CorrectionSet.from_file(
-                    importlib.resources.path(
-                        f"BTVNanoCommissioning.data.BTV.{campaign}", filename
-                    )
-                )
-            if "ctag" in config[campaign]["BTV"].keys() and config[campaign]["BTV"][
-                "btag"
-            ].endswith(".json.gz"):
-                correction_map["btag"] = correctionlib.CorrectionSet.from_file(
-                    importlib.resources.path(
-                        f"BTVNanoCommissioning.data.BTV.{campaign}", filename
-                    )
-                )
             if os.path.exists(
                 f"src/BTVNanoCommissioning/jsonpog-integration/POG/BTV/{campaign}"
             ):
@@ -86,26 +71,24 @@ def load_SF(campaign, syst=False):
                 correction_map["btag"] = {}
                 correction_map["ctag"] = {}
                 _btag_path = f"BTVNanoCommissioning.data.BTV.{campaign}"
-                for tagger in config[campaign]["BTV"]:
+                for tagger in config["BTV"]:
                     with importlib.resources.path(
-                        _btag_path, config[campaign]["BTV"][tagger]
+                        _btag_path, config["BTV"][tagger]
                     ) as filename:
                         if "B" in tagger:
-                            if filename.endswith(".json.gz"):
-                                correction_map[
-                                    "btag"
-                                ] = correctionlib.CorrectionSet.from_file(filename)
-                            else:
-                                correction_map["btag"][tagger] = BTagScaleFactor(
-                                    filename,
-                                    BTagScaleFactor.RESHAPE,
-                                    methods="iterativefit,iterativefit,iterativefit",
-                                )
+                            correction_map["btag"][tagger] = BTagScaleFactor(
+                                filename,
+                                BTagScaleFactor.RESHAPE,
+                                methods="iterativefit,iterativefit,iterativefit",
+                            )
                         else:
-                            if filename.endswith(".json.gz"):
-                                correction_map[
-                                    "ctag"
-                                ] = correctionlib.CorrectionSet.from_file(filename)
+                            if campaign == "Rereco17_94X":
+                                correction_map["ctag"][tagger] = (
+                                    "BTVNanoCommissioning/data/BTV/"
+                                    + campaign
+                                    + "/"
+                                    + config["BTV"][tagger]
+                                )
                             else:
                                 correction_map["ctag"][tagger] = BTagScaleFactor(
                                     filename,
@@ -115,49 +98,30 @@ def load_SF(campaign, syst=False):
         ## lepton SFs
         elif SF == "LSF":
             correction_map["MUO_cfg"] = {
-                mu: f
-                for mu, f in config[campaign]["LSF"].items()
-                if "mu" in mu and "_json" not in mu
+                mu: f for mu, f in config["LSF"].items() if "mu" in mu
             }
             correction_map["EGM_cfg"] = {
-                e: f
-                for e, f in config[campaign]["LSF"].items()
-                if "ele" in e and "_json" not in e
+                e: f for e, f in config["LSF"].items() if "ele" in e
             }
             ## Muon
             if os.path.exists(
                 f"src/BTVNanoCommissioning/jsonpog-integration/POG/MUO/{campaign}"
+            ) and os.path.exists(
+                f"src/BTVNanoCommissioning/jsonpog-integration/POG/EGM/{campaign}"
             ):
                 correction_map["MUO"] = correctionlib.CorrectionSet.from_file(
                     f"src/BTVNanoCommissioning/jsonpog-integration/POG/MUO/{campaign}/muon_Z.json.gz"
                 )
-            if os.path.exists(
-                f"src/BTVNanoCommissioning/jsonpog-integration/POG/EGM/{campaign}"
-            ):
                 correction_map["EGM"] = correctionlib.CorrectionSet.from_file(
                     f"src/BTVNanoCommissioning/jsonpog-integration/POG/EGM/{campaign}/electron.json.gz"
                 )
-            if any(
-                np.char.find(np.array(list(config[campaign]["LSF"].keys())), "mu_json")
-                != -1
-            ):
-                correction_map["MUO"] = correctionlib.CorrectionSet.from_file(
-                    f"src/BTVNanoCommissioning/data/LSF/{campaign}/{config[campaign]['LSF']['mu_json']}"
-                )
-            if any(
-                np.char.find(np.array(list(config[campaign]["LSF"].keys())), "ele_json")
-                != -1
-            ):
-                correction_map["EGM"] = correctionlib.CorrectionSet.from_file(
-                    f"src/BTVNanoCommissioning/data/LSF/{campaign}/{config[campaign]['LSF']['ele_json']}"
-                )
-
             ### Check if any custom corrections needed
             # FIXME: (some low pT muons not supported in jsonpog-integration at the moment)
+
             if (
-                "histo.json" in "\t".join(list(config[campaign]["LSF"].values()))
-                or "histo.txt" in "\t".join(list(config[campaign]["LSF"].values()))
-                or "histo.root" in "\t".join(list(config[campaign]["LSF"].values()))
+                ".json" in "\t".join(list(config["LSF"].values()))
+                or ".txt" in "\t".join(list(config["LSF"].values()))
+                or ".root" in "\t".join(list(config["LSF"].values()))
             ):
                 _mu_path = f"BTVNanoCommissioning.data.LSF.{campaign}"
                 ext = extractor()
@@ -165,9 +129,9 @@ def load_SF(campaign, syst=False):
                     inputs, real_paths = [
                         k
                         for k in correction_map["MUO_cfg"].keys()
-                        if "histo.json" in correction_map["MUO_cfg"][k]
-                        or "histo.txt" in correction_map["MUO_cfg"][k]
-                        or "histo.root" in correction_map["MUO_cfg"][k]
+                        if ".json" in correction_map["MUO_cfg"][k]
+                        or ".txt" in correction_map["MUO_cfg"][k]
+                        or ".root" in correction_map["MUO_cfg"][k]
                     ], [
                         stack.enter_context(importlib.resources.path(_mu_path, f))
                         for f in correction_map["MUO_cfg"].values()
@@ -182,9 +146,9 @@ def load_SF(campaign, syst=False):
                         [
                             f"{paths} {file}"
                             for paths, file in zip(inputs, real_paths)
-                            if "histo.json" in str(file)
-                            or "histo.txt" in str(file)
-                            or "histo.root" in str(file)
+                            if ".json" in str(file)
+                            or ".txt" in str(file)
+                            or ".root" in str(file)
                         ]
                     )
                     if syst:
@@ -196,31 +160,32 @@ def load_SF(campaign, syst=False):
                             + file
                             for paths, file in zip(inputs, real_paths)
                             if ".root" in str(file)
+                            or ".txt" in str(file)
+                            or ".root" in str(file)
                         )
                 ext.finalize()
                 correction_map["MUO_custom"] = ext.make_evaluator()
-
                 _ele_path = f"BTVNanoCommissioning.data.LSF.{campaign}"
                 ext = extractor()
                 with contextlib.ExitStack() as stack:
                     inputs, real_paths = [
                         k
                         for k in correction_map["EGM_cfg"].keys()
-                        if "histo.json" in correction_map["EGM_cfg"][k]
-                        or "histo.txt" in correction_map["EGM_cfg"][k]
-                        or "histo.root" in correction_map["EGM_cfg"][k]
+                        if ".json" in correction_map["EGM_cfg"][k]
+                        or ".txt" in correction_map["EGM_cfg"][k]
+                        or ".root" in correction_map["EGM_cfg"][k]
                     ], [
                         stack.enter_context(importlib.resources.path(_ele_path, f))
                         for f in correction_map["EGM_cfg"].values()
-                        if "histo.json" in f or ".txt" in f or ".root" in f
+                        if ".json" in f or ".txt" in f or ".root" in f
                     ]
                     ext.add_weight_sets(
                         [
                             f"{paths} {file}"
                             for paths, file in zip(inputs, real_paths)
-                            if "histo.json" in str(file)
-                            or "histo.txt" in str(file)
-                            or "histo.root" in str(file)
+                            if ".json" in str(file)
+                            or ".txt" in str(file)
+                            or ".root" in str(file)
                         ]
                     )
                     if syst:
@@ -235,7 +200,6 @@ def load_SF(campaign, syst=False):
                         )
                 ext.finalize()
                 correction_map["EGM_custom"] = ext.make_evaluator()
-
         ## rochester muon momentum correction
         elif SF == "roccor":
             if "2016postVFP_UL" == campaign:
@@ -253,25 +217,29 @@ def load_SF(campaign, syst=False):
             )
             correction_map["roccor"] = rochester_lookup.rochester_lookup(rochester_data)
         elif SF == "JME":
-            correction_map["JME"] = load_jmefactory(campaign)
+            correction_map["JME"] = load_jmefactory(campaign, config["JME"])
         elif SF == "JMAR":
             if os.path.exists(
                 f"src/BTVNanoCommissioning/jsonpog-integration/POG/JME/{campaign}/jmar.json.gz"
             ):
-                correction_map["JMAR_cfg"] = {
-                    j: f for j, f in config[campaign]["JMAR"].items()
-                }
+                correction_map["JMAR_cfg"] = {j: f for j, f in config["JMAR"].items()}
                 correction_map["JMAR"] = correctionlib.CorrectionSet.from_file(
                     f"src/BTVNanoCommissioning/jsonpog-integration/POG/JME/{campaign}/jmar.json.gz"
                 )
+
     return correction_map
 
+
+#def load_lumi(path):
+#    _lumi_path = "BTVNanoCommissioning.data.lumiMasks"
+#    with importlib.resources.path(_lumi_path) as filename:
+#    #with importlib.resources.path(_lumi_path, path) as filename:
+#        return LumiMask(filename)
 
 def load_lumi(campaign):
     _lumi_path = "BTVNanoCommissioning.data.lumiMasks"
     with importlib.resources.path(_lumi_path, config[campaign]["lumiMask"]) as filename:
         return LumiMask(filename)
-
 
 ## MET filters
 met_filters = {
@@ -372,47 +340,11 @@ met_filters = {
 }
 
 
-ext_jetvetomap = extractor()
-with contextlib.ExitStack() as stack:
-    ext_jetvetomap.add_weight_sets(
-        [
-            f"RunCD jetvetomap {stack.enter_context(importlib.resources.path('BTVNanoCommissioning.data.JME.Winter22Run3','Winter22Run3_RunCD_v1.histo.root'))}",
-            f"RunE jetvetomap_eep {stack.enter_context(importlib.resources.path('BTVNanoCommissioning.data.JME.Winter22Run3','Winter22Run3_RunE_v1.histo.root'))}",
-        ]
-    )
-
-ext_jetvetomap.finalize()
-jetvetomap = ext_jetvetomap.make_evaluator()
-
-
-def jetveto(events):
-    if (
-        "Run2022C" in events.metadata["dataset"]
-        or "Run2022D" in events.metadata["dataset"]
-    ):
-        return ak.where(
-            jetvetomap["RunCD"](events.Jet.phi, events.Jet.eta) > 0,
-            ak.ones_like(events.Jet.eta),
-            ak.zeros_like(events.Jet.eta),
-        )
-    elif (
-        "Run2022E" in events.metadata["dataset"]
-        or "Run2022F" in events.metadata["dataset"]
-        or "Run2022G" in events.metadata["dataset"]
-    ):
-        # FIXME: use prompt RunE vetomap for now, but should be updated to RunFG
-        return ak.where(
-            jetvetomap["RunE"](events.Jet.phi, events.Jet.eta) > 0,
-            ak.ones_like(events.Jet.eta),
-            ak.zeros_like(events.Jet.eta),
-        )
-
-
 ##JEC
 # FIXME: would be nicer if we can move to correctionlib in the future together with factory and workable
-def load_jmefactory(campaign):
+def load_jmefactory(campaign, cfg):
     _jet_path = f"BTVNanoCommissioning.data.JME.{campaign}"
-    with importlib.resources.path(_jet_path, config[campaign]["JME"]) as filename:
+    with importlib.resources.path(_jet_path, cfg) as filename:
         with gzip.open(filename) as fin:
             jmestuff = cloudpickle.load(fin)
 
@@ -433,15 +365,7 @@ def add_jec_variables(jets, event_rho):
 
 
 ## JERC
-def JME_shifts(
-    shifts,
-    correct_map,
-    events,
-    campaign,
-    isRealData,
-    systematic=False,
-    exclude_jetveto=False,
-):
+def JME_shifts(shifts, correct_map, events, campaign, isRealData, systematic=False):
     dataset = events.metadata["dataset"]
     if isRealData:
         if "2016preVFP_UL" == campaign:
@@ -453,8 +377,8 @@ def JME_shifts(
             jecname = "FGH"
         elif campaign == "Rereco17_94X":
             jecname = ""
-        elif re.search(r"[Rr]un20\d{2}([A-Z])", dataset):
-            jecname = re.search(r"[Rr]un20\d{2}([A-Z])", dataset).group(1)
+        elif "un" in dataset:
+            jecname = dataset[dataset.find("un") + 6]
         else:
             print("No valid jec name")
             raise NameError
@@ -465,46 +389,36 @@ def JME_shifts(
         add_jec_variables(events.Jet, events.fixedGridRhoFastjetAll),
         lazy_cache=events.caches[0],
     )
-    if "Run3" not in campaign:
-        met = correct_map["JME"]["met_factory"].build(events.MET, jets, {})
-    else:
-        met = correct_map["JME"]["met_factory"].build(events.PuppiMET, jets, {})
+    met = correct_map["JME"]["met_factory"].build(events.MET, jets, {})
     ## HEM 18 issue
-    if isRealData:
-        if "2018" in events.metadata["dataset"]:
-            _runid = events.run >= 319077
-            j_mask = ak.where(
-                _runid
-                & (jets.phi > -1.57)
-                & (jets.phi < -0.87)
-                & (jets.eta > -2.5)
-                & (jets.eta < -1.3),
-                0.8,
-                1,
-            )
-            j_high_eta_mask = ak.where(
-                _runid
-                & (jets.phi > -1.57)
-                & (jets.phi < -0.87)
-                & (jets.eta > -3.0)
-                & (jets.eta < -2.5),
-                0.65,
-                1,
-            )
+    if isRealData and "2018" in campaign:
+        _runid = events.run >= 319077
+        j_mask = ak.where(
+            _runid
+            & (jets.phi > -1.57)
+            & (jets.phi < -0.87)
+            & (jets.eta > -2.5)
+            & (jets.eta < -1.3),
+            0.8,
+            1,
+        )
+        j_high_eta_mask = ak.where(
+            _runid
+            & (jets.phi > -1.57)
+            & (jets.phi < -0.87)
+            & (jets.eta > -3.0)
+            & (jets.eta < -2.5),
+            0.65,
+            1,
+        )
 
-            for var in ["mass", "pt"]:
-                jets[var] = j_mask * j_high_eta_mask * jets[var]
-        if (
-            "Run2022C" in events.metadata["dataset"]
-            or "Run2022D" in events.metadata["dataset"]
-            or "Run2022E" in events.metadata["dataset"]
-        ) and not exclude_jetveto:
-            jets["pt"] = ak.where(jets.veto == 0, jets.pt, 0.0)
+        for var in ["mass", "pt"]:
+            jets[var] = j_mask * j_high_eta_mask * jets[var]
     shifts += [({"Jet": jets, "MET": met}, None)]
 
     ## systematics
     if not isRealData:
-        if systematic != False:
+        if systematic is not False:
             if systematic == "split":
                 for jes in met.fields:
                     if "JES" not in jes or "Total" in jes:
@@ -663,68 +577,30 @@ def Roccor_shifts(shifts, correct_map, events, isRealData, systematic=False):
 
 
 ## PU weight
-def puwei(nPU, correct_map, weights, syst=False):
+def puwei(correct_map, nPU, syst="nominal"):
     if "correctionlib" in str(type(correct_map["PU"])):
-        if syst:
-            return weights.add(
-                "puweight",
-                correct_map["PU"][list(correct_map["PU"].keys())[0]].evaluate(
-                    nPU, "nominal"
-                ),
-                correct_map["PU"][list(correct_map["PU"].keys())[0]].evaluate(
-                    nPU, "up"
-                ),
-                correct_map["PU"][list(correct_map["PU"].keys())[0]].evaluate(
-                    nPU, "down"
-                ),
-            )
-        else:
-            return weights.add(
-                "puweight",
-                correct_map["PU"][list(correct_map["PU"].keys())[0]].evaluate(
-                    nPU, "nominal"
-                ),
-            )
+        return correct_map["PU"][list(correct_map["PU"].keys())[0]].evaluate(nPU, syst)
     else:
-        if syst:
-            weights.add(
-                "puweight",
-                correct_map["PU"](nPU),
-                correct_map["PUup"](nPU),
-                correct_map["PUdown"](nPU),
-            )
-        else:
-            weights.add("puweight", correct_map["PU"](nPU))
+        return correct_map["PU"](nPU)
 
 
 def btagSFs(jet, correct_map, weights, SFtype, syst=False):
-    if SFtype == "DeepJetC" or SFtype == "DeepCSVC":
-        systlist = [
-            "Extrap",
-            "Interp",
-            "LHEScaleWeight_muF",
-            "LHEScaleWeight_muR",
-            "PSWeightFSR",
-            "PSWeightISR",
-            "PUWeight",
-            "Stat",
-            "XSec_BRUnc_DYJets_b",
-            "XSec_BRUnc_DYJets_c",
-            "XSec_BRUnc_WJets_c",
-            "jer",
-            "jesTotal",
-        ]
-    elif SFtype == "DeepJetB" or SFtype == "DeepCSVB":
-        systlist = [
-            "hf",
-            "lf",
-            "cferr1",
-            "cferr2",
-            "hfstat1",
-            "hfstat2",
-            "lfstats1",
-            "lfstats2",
-        ]
+    systlist = [
+        "Extrap",
+        "Interp",
+        "LHEScaleWeight_muF",
+        "LHEScaleWeight_muR",
+        "PSWeightFSR",
+        "PSWeightISR",
+        "PUWeight",
+        "Stat",
+        "XSec_BRUnc_DYJets_b",
+        "XSec_BRUnc_DYJets_c",
+        "XSec_BRUnc_WJets_c",
+        "jer",
+        "jesTotal",
+    ]
+
     sfs_up_all, sfs_down_all = {}, {}
     alljet = jet if jet.ndim > 1 else ak.singletons(jet)
     for i, sys in enumerate(systlist):
@@ -741,7 +617,7 @@ def btagSFs(jet, correct_map, weights, SFtype, syst=False):
             jet.btagDeepCvL = ak.fill_none(jet.btagDeepCvL, 0.0)
             jet.btagDeepCvB = ak.fill_none(jet.btagDeepCvB, 0.0)
             jet.hadronFlavour = ak.fill_none(jet.hadronFlavour, 0)
-            if "correctionlib" in str(type(correct_map["ctag"])):
+            if "correctionlib" in str(type(correct_map["btag"])):
                 if SFtype == "DeepJetC":
                     tmp_sfs = np.where(
                         masknone,
@@ -805,71 +681,6 @@ def btagSFs(jet, correct_map, weights, SFtype, syst=False):
                             jet.btagDeepCvB,
                         ),
                     )
-            if "correctionlib" in str(type(correct_map["btag"])):
-                if SFtype == "DeepJetB":
-                    tmp_sfs = np.where(
-                        masknone,
-                        1.0,
-                        correct_map["btag"]["deepJet_shape"].evaluate(
-                            "central",
-                            jet.hadronFlavour,
-                            jet.btagDeepFlavCvL,
-                            jet.btagDeepFlavCvB,
-                        ),
-                    )
-                    if syst:
-                        tmp_sfs_up = np.where(
-                            masknone,
-                            1.0,
-                            correct_map["btag"]["deepJet_shape"].evaluate(
-                                f"up_{systlist[i]}",
-                                jet.hadronFlavour,
-                                jet.btagDeepFlavCvL,
-                                jet.btagDeepFlavCvB,
-                            ),
-                        )
-                        tmp_sfs_down = np.where(
-                            masknone,
-                            1.0,
-                            correct_map["btag"]["deepJet_shape"].evaluate(
-                                f"down_{systlist[i]}",
-                                jet.hadronFlavour,
-                                jet.btagDeepFlavCvL,
-                                jet.btagDeepFlavCvB,
-                            ),
-                        )
-                if SFtype == "DeepCSVB":
-                    tmp_sfs = np.where(
-                        masknone,
-                        1.0,
-                        correct_map["btag"]["deepCSV_shape"].evaluate(
-                            "central",
-                            jet.hadronFlavour,
-                            jet.btagDeepCvL,
-                            jet.btagDeepCvB,
-                        ),
-                    )
-                    tmp_sfs_up = np.where(
-                        masknone,
-                        1.0,
-                        correct_map["btag"]["deepCSV_shape"].evaluate(
-                            f"up_{systlist[i]}",
-                            jet.hadronFlavour,
-                            jet.btagDeepCvL,
-                            jet.btagDeepCvB,
-                        ),
-                    )
-                    tmp_sfs_down = np.where(
-                        masknone,
-                        1.0,
-                        correct_map["btag"]["deepCSV_shape"].evaluate(
-                            f"down_{systlist[i]}",
-                            jet.hadronFlavour,
-                            jet.btagDeepCvL,
-                            jet.btagDeepCvB,
-                        ),
-                    )
-
             sfs = sfs * tmp_sfs
             if syst:
                 sfs_up = sfs_up * tmp_sfs_up
@@ -892,16 +703,29 @@ def btagSFs(jet, correct_map, weights, SFtype, syst=False):
     return weights
 
 
+### HLT SFs
+def HLTSFs(ele, mu, correct_map, weights, syst=True):
+    sf = correct_map["HLT"]['base/pt_mu_value'](np.minimum(mu.pt,200))*correct_map["HLT"]['base/pt_e_value'](np.minimum(ele.pt,200))
+    if syst:
+        return weights.add(
+            "HLT",
+            sf,
+            (correct_map["HLT"]['base/pt_mu_value'](np.minimum(mu.pt,200))+correct_map["HLT"]['base/pt_mu_error'](np.minimum(mu.pt,200)))*(correct_map["HLT"]['base/pt_e_value'](np.minimum(ele.pt,200))+correct_map["HLT"]['base/pt_e_error'](np.minimum(ele.pt,200))),
+           (correct_map["HLT"]['base/pt_mu_value'](np.minimum(mu.pt,200))-correct_map["HLT"]['base/pt_mu_error'](np.minimum(mu.pt,200)))*(correct_map["HLT"]['base/pt_e_value'](np.minimum(ele.pt,200))-correct_map["HLT"]['base/pt_e_error'](np.minimum(ele.pt,200))),
+        )
+    else:
+        return weights.add("HLT", sf)
+
+
 ### Lepton SFs
 def eleSFs(ele, correct_map, weights, syst=True, isHLT=False):
     allele = ele if ele.ndim > 1 else ak.singletons(ele)
-
     for sf in correct_map["EGM_cfg"].keys():
         ## Only apply SFs for lepton pass HLT filter
         if not isHLT and "HLT" in sf:
             continue
         sf_type = sf[: sf.find(" ")]
-        if "low" in sf or "high" in sf:
+        if "low" in sf:
             continue
         for nele in range(ak.num(allele.pt)[0]):
             ele = allele[:, nele]
@@ -918,192 +742,92 @@ def eleSFs(ele, correct_map, weights, syst=True, isHLT=False):
             if "correctionlib" in str(type(correct_map["EGM"])):
                 ## Reco SF -splitted pT
                 if "Reco" in sf:
-                    if "Summer22" not in correct_map["campaign"]:
-                        ele_pt = np.where(ele.pt < 20.0, 20.0, ele.pt)
-                        ele_pt_low = np.where(ele.pt >= 20.0, 19.9, ele.pt)
-                        sfs_low = np.where(
-                            (~mask) & (~masknone),
-                            correct_map["EGM"][correct_map["EGM_cfg"][sf]].evaluate(
-                                sf.split(" ")[1],
-                                "sf",
+                    ele_pt = np.where(ele.pt < 20.0, 20.0, ele.pt)
+                    ele_pt_low = np.where(ele.pt >= 20.0, 19.9, ele.pt)
+
+                    sfs_low = np.where(
+                        (~mask) & (~masknone),
+                        correct_map["EGM"][list(correct_map["EGM"].keys())[0]].evaluate(
+                            sf[sf.find(" ") + 1 :],
+                            "sf",
+                            "RecoBelow20",
+                            ele_eta,
+                            ele_pt_low,
+                        ),
+                        1.0,
+                    )
+                    sfs = np.where(
+                        mask & (~masknone),
+                        correct_map["EGM"][list(correct_map["EGM"].keys())[0]].evaluate(
+                            sf[sf.find(" ") + 1 :], "sf", "RecoAbove20", ele_eta, ele_pt
+                        ),
+                        sfs_low,
+                    )
+                    sfs = np.where(masknone, 1.0, sfs)
+
+                    if syst:
+                        sfs_up_low = np.where(
+                            ~mask & ~masknone,
+                            correct_map["EGM"][
+                                list(correct_map["EGM"].keys())[0]
+                            ].evaluate(
+                                sf[sf.find(" ") + 1 :],
+                                "sfup",
                                 "RecoBelow20",
                                 ele_eta,
                                 ele_pt_low,
                             ),
-                            1.0,
+                            0.0,
                         )
-                        sfs = np.where(
-                            mask & (~masknone),
-                            correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                sf.split(" ")[1], "sf", "RecoAbove20", ele_eta, ele_pt
-                            ),
-                            sfs_low,
-                        )
-                        sfs = np.where(masknone, 1.0, sfs)
-
-                        if syst:
-                            sfs_up_low = np.where(
-                                ~mask & ~masknone,
-                                correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                    sf.split(" ")[1],
-                                    "sfup",
-                                    "RecoBelow20",
-                                    ele_eta,
-                                    ele_pt_low,
-                                ),
-                                0.0,
-                            )
-                            sfs_down_low = np.where(
-                                ~mask & ~masknone,
-                                correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                    sf.split(" ")[1],
-                                    "sfdown",
-                                    "RecoBelow20",
-                                    ele_eta,
-                                    ele_pt_low,
-                                ),
-                                0.0,
-                            )
-                            sfs_up = np.where(
-                                mask & ~masknone,
-                                correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                    sf.split(" ")[1],
-                                    "sfup",
-                                    "RecoAbove20",
-                                    ele_eta,
-                                    ele_pt,
-                                ),
-                                sfs_up_low,
-                            )
-                            sfs_down = np.where(
-                                mask & ~masknone,
-                                correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                    sf.split(" ")[1],
-                                    "sfdown",
-                                    "RecoAbove20",
-                                    ele_eta,
-                                    ele_pt,
-                                ),
-                                sfs_down_low,
-                            )
-                            sfs_up, sfs_down = np.where(
-                                masknone, 1.0, sfs_up
-                            ), np.where(masknone, 1.0, sfs_down)
-                    else:
-                        ele_pt = np.clip(ele.pt, 20.1, 74.9)
-                        ele_pt_low = np.where(ele.pt >= 20.0, 19.9, ele.pt)
-                        ele_pt_high = np.clip(ele.pt, 75.0, 500.0)
-
-                        sfs_low = np.where(
-                            (ele.pt <= 20.0) & (~masknone),
-                            correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                sf.split(" ")[1],
-                                "sf",
+                        sfs_down_low = np.where(
+                            ~mask & ~masknone,
+                            correct_map["EGM"][
+                                list(correct_map["EGM"].keys())[0]
+                            ].evaluate(
+                                sf[sf.find(" ") + 1 :],
+                                "sfdown",
                                 "RecoBelow20",
                                 ele_eta,
                                 ele_pt_low,
                             ),
-                            1.0,
+                            0.0,
                         )
-                        sfs_high = np.where(
-                            (ele.pt > 75.0) & (~masknone),
-                            correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                sf.split(" ")[1],
-                                "sf",
-                                "RecoAbove75",
+                        sfs_up = np.where(
+                            mask & ~masknone,
+                            correct_map["EGM"][
+                                list(correct_map["EGM"].keys())[0]
+                            ].evaluate(
+                                sf[sf.find(" ") + 1 :],
+                                "sfup",
+                                "RecoAbove20",
                                 ele_eta,
-                                ele_pt_high,
+                                ele_pt,
                             ),
-                            sfs_low,
+                            sfs_up_low,
                         )
-                        sfs = np.where(
-                            (ele.pt > 20.0) & (ele.pt <= 75.0) & (~masknone),
-                            correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                sf.split(" ")[1], "sf", "Reco20to75", ele_eta, ele_pt
+                        sfs_down = np.where(
+                            mask & ~masknone,
+                            correct_map["EGM"][
+                                list(correct_map["EGM"].keys())[0]
+                            ].evaluate(
+                                sf[sf.find(" ") + 1 :],
+                                "sfdown",
+                                "RecoAbove20",
+                                ele_eta,
+                                ele_pt,
                             ),
-                            sfs_high,
+                            sfs_down_low,
                         )
-
-                        sfs = np.where(masknone, 1.0, sfs)
-
-                        if syst:
-                            sfs_up_low = np.where(
-                                (ele.pt <= 20.0) & ~masknone,
-                                correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                    sf.split(" ")[1],
-                                    "sfup",
-                                    "RecoBelow20",
-                                    ele_eta,
-                                    ele_pt_low,
-                                ),
-                                0.0,
-                            )
-                            sfs_down_low = np.where(
-                                (ele.pt <= 20.0) & ~masknone,
-                                correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                    sf.split(" ")[1],
-                                    "sfdown",
-                                    "RecoBelow20",
-                                    ele_eta,
-                                    ele_pt_low,
-                                ),
-                                0.0,
-                            )
-                            sfs_up_high = np.where(
-                                (ele.pt > 20.0) & (ele.pt <= 75.0) & ~masknone,
-                                correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                    sf.split(" ")[1],
-                                    "sfup",
-                                    "RecoAbove75",
-                                    ele_eta,
-                                    ele_pt_high,
-                                ),
-                                sfs_up_low,
-                            )
-                            sfs_down_high = np.where(
-                                (ele.pt > 20.0) & (ele.pt <= 75.0) & ~masknone,
-                                correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                    sf.split(" ")[1],
-                                    "sfdown",
-                                    "RecoAbove75",
-                                    ele_eta,
-                                    ele_pt_high,
-                                ),
-                                sfs_down_low,
-                            )
-                            sfs_up = np.where(
-                                (ele.pt > 20.0) & (ele.pt <= 75.0) & ~masknone,
-                                correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                    sf.split(" ")[1],
-                                    "sfup",
-                                    "Reco20to75",
-                                    ele_eta,
-                                    ele_pt,
-                                ),
-                                sfs_up_high,
-                            )
-                            sfs_down = np.where(
-                                (ele.pt > 20.0) & (ele.pt <= 75.0) & ~masknone,
-                                correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                    sf.split(" ")[1],
-                                    "sfdown",
-                                    "Reco20to75",
-                                    ele_eta,
-                                    ele_pt,
-                                ),
-                                sfs_down_high,
-                            )
-
-                            sfs_up, sfs_down = np.where(
-                                masknone, 1.0, sfs_up
-                            ), np.where(masknone, 1.0, sfs_down)
+                        sfs_up, sfs_down = np.where(masknone, 1.0, sfs_up), np.where(
+                            masknone, 1.0, sfs_down
+                        )
                 ## Other files
                 else:
                     sfs = np.where(
                         masknone,
                         1.0,
-                        correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                            sf.split(" ")[1],
+                        correct_map["EGM"][list(correct_map["EGM"].keys())[0]].evaluate(
+                            sf[sf.find(" ") + 1 :],
                             "sf",
                             correct_map["EGM_cfg"][sf],
                             ele_eta,
@@ -1115,8 +839,10 @@ def eleSFs(ele, correct_map, weights, syst=True, isHLT=False):
                         sfs_up = np.where(
                             masknone,
                             1.0,
-                            correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                sf.split(" ")[1],
+                            correct_map["EGM"][
+                                list(correct_map["EGM"].keys())[0]
+                            ].evaluate(
+                                sf[sf.find(" ") + 1 :],
                                 "sfup",
                                 correct_map["EGM_cfg"][sf],
                                 ele_eta,
@@ -1126,8 +852,10 @@ def eleSFs(ele, correct_map, weights, syst=True, isHLT=False):
                         sfs_down = np.where(
                             masknone,
                             1.0,
-                            correct_map["EGM"][sf.split(" ")[2]].evaluate(
-                                sf.split(" ")[1],
+                            correct_map["EGM"][
+                                list(correct_map["EGM"].keys())[0]
+                            ].evaluate(
+                                sf[sf.find(" ") + 1 :],
                                 "sfdown",
                                 correct_map["EGM_cfg"][sf],
                                 ele_eta,
@@ -1204,17 +932,17 @@ def muSFs(mu, correct_map, weights, syst=False, isHLT=False):
         for nmu in range(ak.num(allmu.pt)[0]):
             mu = allmu[:, nmu]
             masknone = ak.is_none(mu.pt)
-
-            mu_pt = np.clip(mu.pt, 15.0, 199.9)
-            mu_eta = np.clip(np.abs(mu.eta), 0.0, 2.4)
+            mu_eta = ak.fill_none(
+                np.where(np.abs(mu.eta) >= 2.4, 2.39, np.abs(mu.eta)), 2.39
+            )
+            mu_pt = ak.fill_none(np.where(mu.pt < 30, 30, mu.pt), 30)
+            # mu_pt = mu.pt
+            # mu_eta = np.where(np.abs(mu.eta) >= 2.4, 2.39, np.abs(mu.eta))
             mask = mu_pt > 30
             sfs = 1.0
             if "correctionlib" in str(type(correct_map["MUO"])):
-                if ("ID" in sf or "Reco" in sf) and "Summer22" not in correct_map[
-                    "campaign"
-                ]:
-                    mu_pt = ak.fill_none(np.where(mu.pt < 30, 30, mu.pt), 30)
-                    mu_pt_low = ak.fill_none(np.where(mu.pt >= 30, 30, mu.pt), 30)
+                if "ID" in sf or "Reco" in sf:
+                    mu_pt_low = ak.fill_none(np.where(mu.pt >= 30, 30, mu.pt), 15.0)
                     sfs_low = np.where(
                         ~mask & ~masknone,
                         correct_map["MUO_custom"][
@@ -1260,56 +988,29 @@ def muSFs(mu, correct_map, weights, syst=False, isHLT=False):
                         )
 
                 else:
-                    if "Summer22" not in correct_map["campaign"]:
-                        sfs = np.where(
-                            masknone,
-                            1.0,
-                            correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                correct_map["MUO_cfg"][sf.split(" ")[1]],
-                                mu_eta,
-                                mu_pt,
-                                "sf",
-                            ),
-                        )
-                    else:
-                        sfs = np.where(
-                            masknone,
-                            1.0,
-                            correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                mu_eta, mu_pt, "nominal"
-                            ),
-                        )
+                    sfs = np.where(
+                        masknone,
+                        1.0,
+                        correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
+                            sf[sf.find(" ") + 1 :], mu_eta, mu_pt, "sf"
+                        ),
+                    )
+
                     if syst:
-                        if "Summer22" not in correct_map["campaign"]:
-                            sfs_up = np.where(
-                                masknone,
-                                1.0,
-                                correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                    correct_map["MUO_cfg"][sf.split(" ")[1]],
-                                    mu_eta,
-                                    mu_pt,
-                                    "systup",
-                                ),
-                            )
-                            sfs_down = np.where(
-                                masknone,
-                                1.0,
-                                correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                    correct_map["MUO_cfg"][sf.split(" ")[1]],
-                                    mu_eta,
-                                    mu_pt,
-                                    "systdown",
-                                ),
-                            )
-                        else:
-                            sf_unc = np.where(
-                                masknone,
-                                0.0,
-                                correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                    mu_eta, mu_pt, "syst"
-                                ),
-                            )
-                            sfs_up, sfs_down = 1.0 + sf_unc, 1.0 - sf_unc
+                        sfs_up = np.where(
+                            masknone,
+                            1.0,
+                            correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
+                                sf[sf.find(" ") + 1 :], mu_eta, mu_pt, "systup"
+                            ),
+                        )
+                        sfs_down = np.where(
+                            masknone,
+                            1.0,
+                            correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
+                                sf[sf.find(" ") + 1 :], mu_eta, mu_pt, "systdown"
+                            ),
+                        )
             else:
                 if "mu" in sf:
                     sfs = np.where(
@@ -1359,8 +1060,9 @@ def jmar_sf(jet, correct_map, weights, syst=False):
             masknone = ak.is_none(jet.pt)
             # PU Jet ID applied only jet pT<50GeV
             if sf == "PUJetID_eff":
-                jet_pt = np.where(jet.pt > 50, 20, jet.pt)
+                jet_pt = np.where(jet_pt > 50, 20, jet_pt)
                 masknone = (ak.is_none(jet.pt)) & (jet.pt > 50)
+
             if "correctionlib" in str(type(correct_map["JMAR"])):
                 sfs = np.where(
                     masknone,
@@ -1426,7 +1128,12 @@ def add_pdf_weight(weights, pdf_weights):
         # Eq. 28 of same ref
         pdfas_unc = np.sqrt(np.square(pdf_unc) + np.square(as_unc))
         weights.add("PDFaS_weight", nom, pdfas_unc + nom)
-
+        # elif pdf_weights is not None and len(pdf_weights[0])>0:
+        # print(np.shape(ak.to_numpy(pdf_weights)))
+        # arg = pdf_weights[:,1:] - np.ones((len(weights.weight()), 100))
+        # summed = ak.sum(np.square(arg), axis=1)
+        # pdf_unc = np.sqrt((1.0 / 99.0) * summed)
+        # weights.add("PDF_weight", nom, pdf_unc + nom)'''
     else:
         weights.add("aS_weight", nom, up, down)
         weights.add("PDF_weight", nom, up, down)
@@ -1454,7 +1161,6 @@ def top_pT_reweighting(gen):
 
 
 # Jennet adds PS weights
-# https://github.com/andrzejnovak/boostedhiggs/blob/master/boostedhiggs/corrections.py#L88-L108
 def add_ps_weight(weights, ps_weights):
     nom = np.ones(len(weights.weight()))
     up_isr = np.ones(len(weights.weight()))
@@ -1475,178 +1181,21 @@ def add_ps_weight(weights, ps_weights):
     weights.add("UEPS_FSR", nom, up_fsr, down_fsr)
 
 
-def add_scalevar_7pt(weights, lhe_weights):
+
+
+
+def add_scalevar_3pt(weights, lhe_weights,syst=True):
     nom = np.ones(len(weights.weight()))
-
-    if len(lhe_weights) > 0:
-        if len(lhe_weights[0]) == 9:
-            up = np.maximum.reduce(
-                [
-                    lhe_weights[:, 0],
-                    lhe_weights[:, 1],
-                    lhe_weights[:, 3],
-                    lhe_weights[:, 5],
-                    lhe_weights[:, 7],
-                    lhe_weights[:, 8],
-                ]
-            )
-            down = np.minimum.reduce(
-                [
-                    lhe_weights[:, 0],
-                    lhe_weights[:, 1],
-                    lhe_weights[:, 3],
-                    lhe_weights[:, 5],
-                    lhe_weights[:, 7],
-                    lhe_weights[:, 8],
-                ]
-            )
-        elif len(lhe_weights[0]) > 1:
-            print("Scale variation vector has length ", len(lhe_weights[0]))
-    else:
-        up = np.ones(len(weights.weight()))
-        down = np.ones(len(weights.weight()))
-
-    weights.add("scalevar_7pt", nom, up, down)
-
-
-def add_scalevar_3pt(weights, lhe_weights):
-    nom = np.ones(len(weights.weight()))
-
-    if len(lhe_weights) > 0:
-        if len(lhe_weights[0]) == 9:
-            up = np.maximum(lhe_weights[:, 0], lhe_weights[:, 8])
-            down = np.minimum(lhe_weights[:, 0], lhe_weights[:, 8])
-        elif len(lhe_weights[0]) > 1:
-            print("Scale variation vector has length ", len(lhe_weights[0]))
-    else:
-        up = np.ones(len(weights.weight()))
-        down = np.ones(len(weights.weight()))
-
-    weights.add("scalevar_3pt", nom, up, down)
-
-
-# JP calibration utility
-class JPCalibHandler(object):
-    def __init__(self, campaign, isRealData, dataset):
-        r"""
-        A tool for calculating the track probability and jet probability
-            campaign: campaign name
-            isRealData: whether the dataset is real data
-            dataset: dataset name from events.metadata["dataset"]
-        """
-        if isRealData:
-            for key in config[campaign]["JPCalib"]:
-                if key in dataset:
-                    filename = config[campaign]["JPCalib"][key]
-                    break
-            else:
-                raise ValueError(f"No JPCalib file found for dataset {dataset}")
+    if syst:
+        if len(lhe_weights) > 0:
+            if len(lhe_weights[0]) == 9:
+                nom = lhe_weights[:,4]
+                modname=[f"scale{i}" for i in range(9) if i!=4]
+                variations=np.vstack([lhe_weights[:,i] for i in range(9)if i!=4])
+            elif len(lhe_weights[0]) > 1:
+                print("Scale variation vector has length ", len(lhe_weights[0]))
         else:
-            filename = config[campaign]["JPCalib"]["MC"]
-
-        # print(f'Using JPCalib file {filename}')
-
-        templates = uproot.open(
-            f"src/BTVNanoCommissioning/data/JPCalib/{campaign}/{filename}"
-        )
-        self.ipsig_histo_val = np.array(
-            [templates[f"histoCat{i}"].values() for i in range(10)]
-        )
-        self.ipsig_histo_tot = np.sum(self.ipsig_histo_val, axis=1)
-        self.values_cumsum = np.cumsum(self.ipsig_histo_val[:, ::-1], axis=1)[:, ::-1]
-        self.edges = templates["histoCat0"].axes[0].edges()
-
-    def flatten(self, array):
-        r"""
-        Get the fully flattened array and its layout for each layer
-        """
-        layouts = []
-        array_fl = array
-        while str(ak.type(array_fl)).count("*") > 1:
-            layouts.append(ak.num(array_fl))
-            array_fl = ak.flatten(array_fl)
-        return array_fl, layouts
-
-    def unflatten(self, array_fl, layouts):
-        r"""
-        Recover a flattened array using the original layouts
-        """
-        array = array_fl
-        for layout in layouts[::-1]:
-            array = ak.unflatten(array, layout)
-        return array
-
-    def calc_track_proba(self, ipsig: ak.Array, cat: ak.Array):
-        r"""
-        Calculate the track probability from the integral of the track IPsig templates, given the IPsig and category.
-        Reference code: https://github.com/cms-sw/cmssw/blob/CMSSW_13_0_X/RecoBTag/TrackProbability/src/HistogramProbabilityEstimator.cc
-            ipsig: IP significance array
-            cat: category array (0-9)
-        """
-
-        if ak.any(cat < 0) or ak.any(cat > 9):
-            raise ValueError("Category out of range [0, 9]")
-
-        # get the fully flattened array of the input while storing its layouts for later recovery
-        ipsig_fl, layouts = self.flatten(ipsig)
-        cat_fl = ak.flatten(cat, axis=None)
-
-        # index of the IPsig bins
-        ipsig_fl = abs(ipsig_fl)
-        ipsig_fl_index = np.minimum(
-            np.searchsorted(self.edges, ipsig_fl), self.ipsig_histo_val.shape[1] - 1
-        )
-
-        # retrieve the cumsum value (\int_{ipsig}^{inf} p(ipsig') d(ipsig')) from the correct template
-        ipsig_cumsum_fl = self.values_cumsum[cat_fl, ipsig_fl_index]
-
-        # calculate the track probability as (\int_{ipsig}^{inf} ..) / (\int_{0}^{inf} ..) * sign(IPsig)
-        proba_fl = (ipsig_cumsum_fl / self.ipsig_histo_tot[cat_fl]) * np.sign(ipsig_fl)
-
-        # recover the original layout
-        proba = self.unflatten(proba_fl, layouts)
-        return proba
-
-    def calc_jet_proba(self, proba):
-        # Calculate jet probability (JP)
-        # according to jetProbability func in https://github.com/cms-sw/cmssw/blob/CMSSW_13_0_X/RecoBTag/ImpactParameter/interface/TemplatedJetProbabilityComputer.h
-
-        # minium proba = 0.5%
-        proba = np.maximum(proba, 0.005)  # dim: (evt, jet, trk)
-
-        ntrk = ak.num(proba, axis=-1)  # dim: (evt, jet), the number of tracks in a jet
-        prodproba_log = ak.sum(
-            np.log(proba), axis=-1
-        )  # dim: (evt, jet), the log(Π(proba)) of all tracks in a jet
-        prodproba_log_m_log = ak.where(
-            (ak.num(proba, axis=-1) >= 2) & (prodproba_log < 0),
-            np.log(-prodproba_log),
-            0,
-        )  # log(-logΠ), if >=2 tracks in a jet
-
-        # now calculating Σ_tr{0..N-1} ((-logΠ)^tr / tr!)
-        trk_index = ak.local_index(proba)
-        fact_array = ak.concatenate(
-            [
-                [1.0],
-                np.arange(1, max(5, ak.max(trk_index) + 1), dtype=np.float64).cumprod(),
-            ]
-        )  # construct a factorial array
-        trk_index_fl, _layouts = self.flatten(trk_index)
-        lfact = self.unflatten(
-            fact_array[trk_index_fl], _layouts
-        )  # dim: (evt, jet, trk), nested factorial array given the track index
-
-        prob = ak.sum(
-            np.exp(trk_index * prodproba_log_m_log - np.log(lfact)), axis=-1
-        )  # dim: (evt, jet), Σ_tr{0..N-1} ((-logΠ)^tr / tr!)
-
-        prob_jet = np.minimum(
-            np.exp(np.maximum(np.log(np.maximum(prob, 1e-30)) + prodproba_log, -30.0)),
-            1.0,
-        )  # dim: (evt, jet), calculating Π * Σ_tr{0..N-1} ((-logΠ)^tr / tr!)
-
-        prob_jet = ak.where(prodproba_log < 0, prob_jet, 1.0)
-        prob_jet = np.maximum(prob_jet, 1e-30)
-
-        return prob_jet
+            up = np.ones(len(weights.weight()))
+            down = np.ones(len(weights.weight()))
+    if syst and len(lhe_weights) > 0 and len(lhe_weights[0]) == 9: weights.add_multivariation("scalevar_3pt",nom,modname,variations,variations)
+    else:weights.add("scalevar_3pt", nom)
