@@ -19,7 +19,7 @@ correction_config = {
         },
     },
     "2017_UL": {
-        "lumiMask": "Cert_294927-306462_13TeV_UL2017_Collisions17_MuonJSON.txt",
+        "lumiMask": "Cert_294927-306462_13TeV_UL2017_Collisions17_GoldenJSON.txt",
         "PU": None,
         "JME": "jec_compiled.pkl.gz",
         "BTV": {"deepCSV": "shape", "deepJet": "shape"},
