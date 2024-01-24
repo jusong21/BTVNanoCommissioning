@@ -14,7 +14,8 @@ from BTVNanoCommissioning.helpers.BTA_helper import (
     calc_ip_vector,
 )
 from BTVNanoCommissioning.helpers.func import update
-from BTVNanoCommissioning.utils.correction import load_SF, JME_shifts, JPCalibHandler
+from BTVNanoCommissioning.utils.correction import load_SF, JME_shifts
+#from BTVNanoCommissioning.utils.correction import load_SF, JME_shifts, JPCalibHandler
 
 
 ## Based on coffea_array_producer.ipynb from Congqiao
