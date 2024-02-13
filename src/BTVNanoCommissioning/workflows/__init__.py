@@ -1,5 +1,10 @@
 from functools import partial
 
+# for dileptonic analyzer
+from BTVNanoCommissioning.workflows.ttcc2L2Nu_producer import (
+    NanoProcessor as TTCCdilepProcessor,
+)
+
 # Validation
 from BTVNanoCommissioning.workflows.validation import (
     NanoProcessor as ValidationProcessor,
@@ -58,6 +63,8 @@ from BTVNanoCommissioning.workflows.example import (
 # FIXME - make names more systematic?
 workflows = {}
 workflows["validation"] = ValidationProcessor
+
+workflows["ttcc2L2Nu"] = TTCCdilepProcessor
 
 # TTBar
 workflows["ttcom"] = TTbarValidProcessor

@@ -71,6 +71,7 @@ def uproot_writeable(events, include=["events", "run", "luminosityBlock"]):
     if len(include) == 1 and include[0] == "*":
         no_filter = False
     for bname in events.fields:
+        print('bname', bname)
         if not events[bname].fields:
             if not no_filter and bname not in include:
                 continue
@@ -109,6 +110,10 @@ def uproot_writeable(events, include=["events", "run", "luminosityBlock"]):
                     continue
                 # skip IdxG
                 if "IdxG" in n:
+                    continue
+                # skip branches not in include
+                if (bname+'_'+n not in include) and (all(np.char.find(n, include_nest) == -1)):
+                    # print(bname, ' ', n)
                     continue
                 b_nest[n] = ak.fill_none(
                     ak.packed(ak.without_parameters(events[bname][n])), -99
