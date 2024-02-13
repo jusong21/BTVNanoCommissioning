@@ -1,5 +1,6 @@
 *.coffea
 *.pyc
+*.root
 
 *.py~
 .ipynb_checkpoints/
