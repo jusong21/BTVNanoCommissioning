@@ -191,6 +191,8 @@ def get_main_parser():
         help=f"(Specific for dask/lxplus file splitting, default: %(default)s)\n   Format: $dict_index_start,$file_index_start,$dict_index_stop,$file_index_stop. Stop indices are optional. $dict_index refers to the index, splitted $dict_index and $file_index with ','"
         "$dict_index refers to the sample dictionary of the samples json file. $file_index refers to the N-th batch of files per dask-worker, with its size being defined by the option --index. The job will start (stop) submission from (with) the corresponding indices.",
     )
+	# ttbar 
+    parser.add_argument("--isTTbar", action="store_true", help="ttbar samples")
 
     # Debugging
     parser.add_argument(
@@ -338,6 +340,7 @@ if __name__ == "__main__":
         args.isArray,
         args.noHist,
         args.chunk,
+		args.isTTbar,
     )
 
     ## create tmp directory and check file exist or not
