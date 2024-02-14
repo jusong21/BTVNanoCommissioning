@@ -103,7 +103,7 @@ class NanoProcessor(processor.ProcessorABC):
 		isRealData = not hasattr(events, "genWeight")
 		## Create histograms
 		_hist_event_dict = (
-			{"": None} if self.noHist else histogrammer(events, "ttdilep_sf")
+			{"": None} if self.noHist else histogrammer(events, "ttcc2L2Nu")
 		)
 		if _hist_event_dict == None:
 			_hist_event_dict[""]
@@ -311,10 +311,7 @@ class NanoProcessor(processor.ProcessorABC):
 					"phi": genlep.phi,
 					"pdgID": genlep.pdgId,
 					"status": genlep.status,
-					"mother": ak.fill_none(
-						ak.where(isB | isD, 5 * isB + 4 * isD, 10 * istau + 100 * isWZ),
-						0,
-					),
+					"mother": ak.fill_none(ak.where(isB | isD, 5 * isB + 4 * isD, 10 * istau + 100 * isWZ), 0),
 				}
 			)
 			# gen-level jet cleaning aginst prompt leptons from WZ or tau
@@ -449,6 +446,18 @@ class NanoProcessor(processor.ProcessorABC):
 			"DeepJetB",
 			"DeepJetB",
 		]  # exclude b-tag SFs for btag inputs
+		print('here weight')
+		print(weights)
+		for w in weights.variations:
+			print(w)
+		print()
+		print('systematics')
+		for s in systematics:
+			print(s)
+
+		print('\nweight.weight')
+		print(weights.weight())
+		print(weights.weight())
 
 		#######################
 		#  Create root files  #

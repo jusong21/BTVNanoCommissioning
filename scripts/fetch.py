@@ -135,16 +135,22 @@ def getFilesFromDas(args):
         if Tier == "USER":
             instance = "prod/phys03"
         print("Creating list of files for dataset", dsname, Tier, instance)
+        print(("/cvmfs/cms.cern.ch/common/dasgoclient -query='instance={} file dataset={}'").format(instance, fset[fset.index(dataset)].rstrip()))
         flist = (
             os.popen(
                 (
                     "/cvmfs/cms.cern.ch/common/dasgoclient -query='instance={} file dataset={}'"
+                    # "dasgoclient -query='instance={} file dataset={}'"
+                    #--query="file dataset=$line instance=prod/phys03 |grep file.name
                 ).format(instance, fset[fset.index(dataset)].rstrip())
             )
             .read()
             .split("\n")
         )
         import json
+
+        print('flist 1')
+        print(flist)
 
         dataset = dataset[:-1] if "\n" in dataset else dataset
         fetchsite = json.loads(
@@ -198,6 +204,8 @@ def getFilesFromDas(args):
             fdict[dsname] = [xrd + f for f in flist if len(f) > 1]
         else:  # needed to collect all data samples into one common key "Data" (using append() would introduce a new element for the key)
             fdict[dsname].extend([xrd + f for f in flist if len(f) > 1])
+        print('fdict 2')
+        print(fdict)
 
     return fdict
 
