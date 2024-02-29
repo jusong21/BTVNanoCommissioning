@@ -24,10 +24,10 @@ correction_config = {
         "JME": "jec_compiled.pkl.gz",
         "BTV": {"deepCSV": "shape", "deepJet": "shape"},
         "LSF": {
-            "ele_ID 2017 UL-Electron-ID-SF": "wp90iso",
+            "ele_ID 2017 UL-Electron-ID-SF": "Tight",
             "ele_Reco 2017 UL-Electron-ID-SF": "RecoAbove20",
             "mu_Reco 2017_UL": "NUM_TrackerMuons_DEN_genTracks",
-            "mu_HLT 2017_UL": "NUM_IsoMu27_DEN_CutBasedIdTight_and_PFIsoTight",
+            #"mu_HLT 2017_UL": "NUM_IsoMu27_DEN_CutBasedIdTight_and_PFIsoTight",
             "mu_ID 2017_UL": "NUM_TightID_DEN_TrackerMuons",
             "mu_Iso 2017_UL": "NUM_TightRelIso_DEN_TightIDandIPCut",
             "mu_ID_low *": "Efficiency_muon_trackerMuon_Run2017_UL_ID.histo.json",
