@@ -35,7 +35,7 @@ def ele_cuttightid(events, campaign):
 	elePassDZ = (abs(events.Electron.eta) <= 1.479) & (abs(events.Electron.dz) < 0.1) | (abs(events.Electron.eta) > 1.479) & (abs(events.Electron.dz) < 0.2)
 	elemask = (
 		(events.Electron.pt > 20)
-		& (abs(events.Electron.eta) < 2.1)
+		& (abs(events.Electron.eta) < 2.4)
 		& eleEtaGap
 		& elePassDXY
 		& elePassDZ

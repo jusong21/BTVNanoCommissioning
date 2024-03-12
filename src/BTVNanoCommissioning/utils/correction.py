@@ -5,7 +5,6 @@ import contextlib
 import cloudpickle
 import os
 import numpy as np
-np.set_printoptions(linewidth=np.inf, threshold=20)
 import awkward as ak
 from coffea.lookup_tools import extractor, txt_converters, rochester_lookup
 
@@ -53,8 +52,7 @@ def load_SF(campaign, syst=False):
 			
 			# with importlib.resources.path(_pu_path, config["HLT"]) as filename:
 			#for filename in config["HLT"]:
-			for filename in config[campaign]["HLT"]:
-				ext.add_weight_sets([f"* * src/BTVNanoCommissioning/data/LSF/{campaign}/{filename}"])
+			ext.add_weight_sets([f"* * src/BTVNanoCommissioning/data/LSF/{campaign}/{config[campaign]['HLT']}"])
 			ext.finalize()
 			correction_map["HLT"] = ext.make_evaluator()
 		## btag weight
@@ -102,11 +100,9 @@ def load_SF(campaign, syst=False):
 		## lepton SFs
 		elif SF == "LSF":
 			correction_map["MUO_cfg"] = {
-				#mu: f for mu, f in config["LSF"].items() if "mu" in mu
 				mu: f for mu, f in config[campaign]["LSF"].items() if "mu" in mu
 			}
 			correction_map["EGM_cfg"] = {
-				#e: f for e, f in config["LSF"].items() if "ele" in e
 				e: f for e, f in config[campaign]["LSF"].items() if "ele" in e
 			}
 			## Muon
@@ -226,7 +222,6 @@ def load_SF(campaign, syst=False):
 			)
 			correction_map["roccor"] = rochester_lookup.rochester_lookup(rochester_data)
 		elif SF == "JME":
-			#correction_map["JME"] = load_jmefactory(campaign, config["JME"])
 			correction_map["JME"] = load_jmefactory(campaign, config[campaign]["JME"])
 		elif SF == "JMAR":
 			if os.path.exists(
@@ -770,18 +765,34 @@ def btagSFs(jet, correct_map, weights, SFtype, syst=False):
 		)
 	return weights
 
-### HLT SFs
-def HLTSFs(ele, mu, correct_map, weights, syst=True):
-	sf = correct_map["HLT"]['base/pt_mu_value'](np.minimum(mu.pt,200))*correct_map["HLT"]['base/pt_e_value'](np.minimum(ele.pt,200))
-	if syst:
-		return weights.add(
-			"HLT",
-			sf,
-			(correct_map["HLT"]['base/pt_mu_value'](np.minimum(mu.pt,200))+correct_map["HLT"]['base/pt_mu_error'](np.minimum(mu.pt,200)))*(correct_map["HLT"]['base/pt_e_value'](np.minimum(ele.pt,200))+correct_map["HLT"]['base/pt_e_error'](np.minimum(ele.pt,200))),
-		   (correct_map["HLT"]['base/pt_mu_value'](np.minimum(mu.pt,200))-correct_map["HLT"]['base/pt_mu_error'](np.minimum(mu.pt,200)))*(correct_map["HLT"]['base/pt_e_value'](np.minimum(ele.pt,200))-correct_map["HLT"]['base/pt_e_error'](np.minimum(ele.pt,200))),
-		)
-	else:
-		return weights.add("HLT", sf)
+def HLTSFs(lep1, lep2, channel, correct_map, weights, syst=True):
+	lep1_pt = ak.fill_none(lep1.pt, 20)
+	lep2_pt = ak.fill_none(lep2.pt, 20)
+	
+	masknone = ak.is_none(lep1.pt) | ak.is_none(lep2.pt)
+	ee_mask = abs(channel)==121
+	mm_mask = abs(channel)==169
+	em_mask = abs(channel)==143
+	pt_mask = (lep1_pt > 20) & (lep2_pt > 20)
+
+	# only with errors
+	sfs = np.ones_like(lep1.pt)
+	sfs = np.where(
+		(~masknone) & pt_mask & ee_mask,
+		correct_map["HLT"]["h2D_SF_ee_lepABpt_FullError"](lep1_pt, lep2_pt),
+		sfs,
+	)
+	sfs = np.where(
+		(~masknone) & pt_mask & mm_mask,
+		correct_map["HLT"]["h2D_SF_mumu_lepABpt_FullError"](lep1_pt, lep2_pt),
+		sfs,
+	)
+	sfs = np.where(
+		(~masknone) & pt_mask & em_mask,
+		correct_map["HLT"]["h2D_SF_emu_lepABpt_FullError"](lep1_pt, lep2_pt),
+		sfs,
+	)
+	return weights.add("HLT", sfs)
 
 
 ### Lepton SFs
