@@ -117,6 +117,9 @@ def get_main_parser():
         help="Number of events per process chunk",
     )
     parser.add_argument("--skipbadfiles", action="store_true", help="Skip bad files.")
+	# ttbar 
+    parser.add_argument("--isTTbar", action="store_true", help="ttbar samples")
+
     parser = get_condor_submitter_parser(parser)
     return parser
 
