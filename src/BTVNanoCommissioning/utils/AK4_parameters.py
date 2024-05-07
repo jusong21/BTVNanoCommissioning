@@ -21,7 +21,7 @@ correction_config = {
     "2017_UL": {
         "lumiMask": "Cert_294927-306462_13TeV_UL2017_Collisions17_GoldenJSON.txt",
         "PU": None,
-		"HLT": "TriggerSF_2017_ULv2.root",
+	"HLT": "TriggerSF_2017_ULv2.root",
         "JME": "jec_compiled.pkl.gz",
         "BTV": {"deepCSV": "shape", "deepJet": "shape"},
         "LSF": {
