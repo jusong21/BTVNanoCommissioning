@@ -225,7 +225,7 @@ request_cpus = 1
 request_memory = 2000
 use_x509userproxy = true
 
-+JobFlavour = "tomorrow"
++JobFlavour = "espresso"
 
 Log        = {log_dir}/job.log_$(Cluster)
 Output     = {log_dir}/job.out_$(Cluster)-$(Process)

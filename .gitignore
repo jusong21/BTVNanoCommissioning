@@ -1,7 +1,9 @@
 *.coffea
 *.pyc
-*.root
 
+*.tar.gz
+array*
+hist*
 *.py~
 .ipynb_checkpoints/
 \#*
