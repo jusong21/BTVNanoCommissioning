@@ -62,7 +62,7 @@ def load_SF(campaign, syst=False):
             #for filename in config["HLT"]:
             ext.add_weight_sets([f"* * src/BTVNanoCommissioning/data/LSF/{campaign}/{config[campaign]['HLT']}"])
             ext.finalize()
-            correction_map["HLT"] = ext.make_evaluator()
+            correct_map["HLT"] = ext.make_evaluator()
         ## btag weight
         elif SF == "BTV":
             if "btag" in config[campaign]["BTV"].keys() and config[campaign]["BTV"][
@@ -848,6 +848,11 @@ def btagSFs(jet, correct_map, weights, SFtype, syst=False):
         ]
     sfs_up_all, sfs_down_all = {}, {}
     alljet = jet if jet.ndim > 1 else ak.singletons(jet)
+
+    print('syst ', syst)
+    print('syst ', syst)
+    print('syst ', syst)
+    print('syst ', syst)
     for i, sys in enumerate(systlist):
         sfs, sfs_down, sfs_up = (
             np.ones_like(alljet[:, 0].pt),
@@ -857,6 +862,9 @@ def btagSFs(jet, correct_map, weights, SFtype, syst=False):
         for nj in range(ak.num(alljet.pt)[0]):
             jet = alljet[:, nj]
             masknone = ak.is_none(jet.pt)
+
+            jet_pt = ak.fill_none(jet.pt, 20)
+            jet_eta = ak.fill_none(jet.eta, 2.39)
             jet.btagDeepFlavCvL = ak.fill_none(jet.btagDeepFlavCvL, 0.0)
             jet.btagDeepFlavCvB = ak.fill_none(jet.btagDeepFlavCvB, 0.0)
             jet.btagDeepCvL = ak.fill_none(jet.btagDeepCvL, 0.0)
@@ -895,37 +903,6 @@ def btagSFs(jet, correct_map, weights, SFtype, syst=False):
                                 jet.btagDeepFlavCvB,
                             ),
                         )
-                if SFtype == "DeepCSVC":
-                    tmp_sfs = np.where(
-                        masknone,
-                        1.0,
-                        correct_map["ctag"]["deepCSV_shape"].evaluate(
-                            "central",
-                            jet.hadronFlavour,
-                            jet.btagDeepCvL,
-                            jet.btagDeepCvB,
-                        ),
-                    )
-                    tmp_sfs_up = np.where(
-                        masknone,
-                        1.0,
-                        correct_map["ctag"]["deepCSV_shape"].evaluate(
-                            f"up_{systlist[i]}",
-                            jet.hadronFlavour,
-                            jet.btagDeepCvL,
-                            jet.btagDeepCvB,
-                        ),
-                    )
-                    tmp_sfs_down = np.where(
-                        masknone,
-                        1.0,
-                        correct_map["ctag"]["deepCSV_shape"].evaluate(
-                            f"down_{systlist[i]}",
-                            jet.hadronFlavour,
-                            jet.btagDeepCvL,
-                            jet.btagDeepCvB,
-                        ),
-                    )
             if "correctionlib" in str(type(correct_map["btag"])):
                 if SFtype == "DeepJetB":
                     tmp_sfs = np.where(
@@ -934,8 +911,9 @@ def btagSFs(jet, correct_map, weights, SFtype, syst=False):
                         correct_map["btag"]["deepJet_shape"].evaluate(
                             "central",
                             jet.hadronFlavour,
-                            jet.btagDeepFlavCvL,
-                            jet.btagDeepFlavCvB,
+                            abs(jet_eta),
+                            jet_pt,
+                            jet.btagDeepFlavB,
                         ),
                     )
                     if syst:
@@ -945,8 +923,9 @@ def btagSFs(jet, correct_map, weights, SFtype, syst=False):
                             correct_map["btag"]["deepJet_shape"].evaluate(
                                 f"up_{systlist[i]}",
                                 jet.hadronFlavour,
-                                jet.btagDeepFlavCvL,
-                                jet.btagDeepFlavCvB,
+                                abs(jet_eta),
+                                jet_pt,
+                                jet.btagDeepFlavB,
                             ),
                         )
                         tmp_sfs_down = np.where(
@@ -955,42 +934,11 @@ def btagSFs(jet, correct_map, weights, SFtype, syst=False):
                             correct_map["btag"]["deepJet_shape"].evaluate(
                                 f"down_{systlist[i]}",
                                 jet.hadronFlavour,
-                                jet.btagDeepFlavCvL,
-                                jet.btagDeepFlavCvB,
+                                abs(jet_eta),
+                                jet_pt,
+                                jet.btagDeepFlavB,
                             ),
                         )
-                if SFtype == "DeepCSVB":
-                    tmp_sfs = np.where(
-                        masknone,
-                        1.0,
-                        correct_map["btag"]["deepCSV_shape"].evaluate(
-                            "central",
-                            jet.hadronFlavour,
-                            jet.btagDeepCvL,
-                            jet.btagDeepCvB,
-                        ),
-                    )
-                    tmp_sfs_up = np.where(
-                        masknone,
-                        1.0,
-                        correct_map["btag"]["deepCSV_shape"].evaluate(
-                            f"up_{systlist[i]}",
-                            jet.hadronFlavour,
-                            jet.btagDeepCvL,
-                            jet.btagDeepCvB,
-                        ),
-                    )
-                    tmp_sfs_down = np.where(
-                        masknone,
-                        1.0,
-                        correct_map["btag"]["deepCSV_shape"].evaluate(
-                            f"down_{systlist[i]}",
-                            jet.hadronFlavour,
-                            jet.btagDeepCvL,
-                            jet.btagDeepCvB,
-                        ),
-                    )
-
             sfs = sfs * tmp_sfs
             if syst:
                 sfs_up = sfs_up * tmp_sfs_up
@@ -1042,7 +990,6 @@ def HLTSFs(lep1, lep2, channel, correct_map, weights, syst=True):
     return weights.add("HLT", sfs)
 
 
-d
 ### Lepton SFs
 def eleSFs(ele, correct_map, weights, syst=True, isHLT=False):
     allele = ele if ele.ndim > 1 else ak.singletons(ele)
@@ -1253,16 +1200,19 @@ def muSFs(mu, correct_map, weights, syst=False, isHLT=False):
             mu = allmu[:, nmu]
             masknone = ak.is_none(mu.pt)
 
-            mu_pt = np.clip(mu.pt, 15.0, 199.9)
-            mu_eta = np.clip(np.abs(mu.eta), 0.0, 2.4)
-            mask = mu_pt > 30
+            mu_pt = ak.fill_none(mu.pt, 15)
+            mu_eta = ak.fill_none(np.abs(mu.eta), 2.39)
+            mask = mu_pt > 40
             sfs = 1.0
             if "correctionlib" in str(type(correct_map["MUO"])):
-                if ("ID" in sf or "Reco" in sf) and "Summer22" not in correct_map[
-                    "campaign"
-                ]:
-                    mu_pt = ak.fill_none(np.where(mu.pt < 30, 30, mu.pt), 30)
-                    mu_pt_low = ak.fill_none(np.where(mu.pt >= 30, 30, mu.pt), 30)
+#                if ("ID" in sf or "Reco" in sf) and "Summer22" not in correct_map[
+#                    "campaign"
+#                ]:
+                if "Reco" in sf:
+                    mu_pt = ak.fill_none(np.where(mu.pt < 40, 40, mu.pt), 40)
+                    mu_pt_low = ak.fill_none(np.where(mu.pt >= 40, 40, mu.pt), 40)
+
+                    # check low
                     sfs_low = np.where(
                         ~mask & ~masknone,
                         correct_map["MUO_custom"][
@@ -1274,7 +1224,7 @@ def muSFs(mu, correct_map, weights, syst=False, isHLT=False):
                     sfs = np.where(
                         mask & ~masknone,
                         correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                            sf.split(" ")[1], mu_eta, mu_pt, "sf"
+                            mu_eta, mu_pt, "nominal"
                         ),
                         sfs_low,
                     )
@@ -1292,72 +1242,53 @@ def muSFs(mu, correct_map, weights, syst=False, isHLT=False):
                         sfs_up = np.where(
                             mask & ~masknone,
                             correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                sf.split(" ")[1], mu_eta, mu_pt, "systup"
+                                mu_eta, mu_pt, "systup"
                             ),
                             sfs_forerr + sfs_err_low,
                         )
                         sfs_down = np.where(
                             mask & ~masknone,
                             correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                sf.split(" ")[1], mu_eta, mu_pt, "systdown"
+                                mu_eta, mu_pt, "systdown"
                             ),
                             sfs_forerr - sfs_err_low,
                         )
-                        sfs_up, sfs_down = np.where(masknone, 1.0, sfs_up), np.where(
-                            masknone, 1.0, sfs_down
-                        )
-
+                        sfs_up, sfs_down = np.where(masknone, 1.0, sfs_up), np.where(masknone, 1.0, sfs_down)
+                # ID, Iso
                 else:
-                    if "Summer22" not in correct_map["campaign"]:
-                        sfs = np.where(
-                            masknone,
-                            1.0,
-                            correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                correct_map["MUO_cfg"][sf.split(" ")[1]],
-                                mu_eta,
-                                mu_pt,
-                                "sf",
-                            ),
-                        )
-                    else:
-                        sfs = np.where(
-                            masknone,
-                            1.0,
-                            correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                mu_eta, mu_pt, "nominal"
-                            ),
-                        )
+                    sfs = np.where(
+                        masknone,
+                        1.0,
+                        correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
+                            mu_eta, mu_pt, "nominal",
+                        ),
+                    )
+
                     if syst:
-                        if "Summer22" not in correct_map["campaign"]:
-                            sfs_up = np.where(
-                                masknone,
-                                1.0,
-                                correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                    correct_map["MUO_cfg"][sf.split(" ")[1]],
-                                    mu_eta,
-                                    mu_pt,
-                                    "systup",
-                                ),
-                            )
-                            sfs_down = np.where(
-                                masknone,
-                                1.0,
-                                correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                    correct_map["MUO_cfg"][sf.split(" ")[1]],
-                                    mu_eta,
-                                    mu_pt,
-                                    "systdown",
-                                ),
-                            )
-                        else:
-                            sf_unc = np.where(
-                                masknone,
-                                0.0,
-                                correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
-                                    mu_eta, mu_pt, "syst"
-                                ),
-                            )
-                            sfs_up, sfs_down = 1.0 + sf_unc, 1.0 - sf_unc
+                       sfs_up = np.where(
+                           masknone,
+                           1.0,
+                           correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
+                               mu_eta, mu_pt, "systup",
+                           ),
+                       )
+                       sfs_down = np.where(
+                           masknone,
+                           1.0,
+                           correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
+                               mu_eta, mu_pt, "systdown",
+                           ),
+                       )
+#                       else:
+#                        sf_unc = np.where(
+#                            masknone,
+#                            0.0,
+#                            correct_map["MUO"][correct_map["MUO_cfg"][sf]].evaluate(
+#                                mu_eta, mu_pt, "syst"
+#                            ),
+#                        )
+#                        sfs_up, sfs_down = 1.0 + sf_unc, 1.0 - sf_unc
+            # not correctionlib
             else:
                 if "mu" in sf:
                     sfs = np.where(
