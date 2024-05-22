@@ -4,6 +4,9 @@
 *.py~
 .ipynb_checkpoints/
 \#*
+array*
+hist*
+*.tar.gz
 
 runinfo/
 plot/
