@@ -1,7 +1,7 @@
 import collections, numpy as np, awkward as ak
 from coffea import processor
 from coffea.analysis_tools import Weights
-from BTVNanoCommissioning.utils.selection import jet_cut
+from BTVNanoCommissioning.utils.selection import jet_id
 from BTVNanoCommissioning.helpers.func import flatten, update
 from BTVNanoCommissioning.utils.histogrammer import histogrammer
 from BTVNanoCommissioning.helpers.update_branch import missing_branch, add_jec
