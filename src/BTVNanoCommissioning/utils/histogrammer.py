@@ -115,6 +115,26 @@ def histogrammer(events, workflow):
             Hist.storage.Weight(),
         )
 
+    elif "ttcc2L2Nu" == workflow:
+        obj_list = ["mu", "ele"]
+        for i in range(2):
+            obj_list.append(f"jet{i}")
+            _hist_dict[f"dr_mujet{i}"] = Hist.Hist(
+                syst_axis, flav_axis, dr_axis, Hist.storage.Weight()
+            )
+        for i in ["mu", "ele"]:
+            if i == "mu":
+                _hist_dict[f"{i}_pfRelIso04_all"] = Hist.Hist(
+                    syst_axis, iso_axis, Hist.storage.Weight()
+                )
+            else:
+                _hist_dict[f"{i}_pfRelIso03_all"] = Hist.Hist(
+                    syst_axis, iso_axis, Hist.storage.Weight()
+                )
+            _hist_dict[f"{i}_dxy"] = Hist.Hist(
+                syst_axis, dxy_axis, Hist.storage.Weight()
+            )
+            _hist_dict[f"{i}_dz"] = Hist.Hist(syst_axis, dz_axis, Hist.storage.Weight())
     elif "ttdilep_sf" == workflow:
         obj_list = ["mu", "ele"]
         for i in range(2):
